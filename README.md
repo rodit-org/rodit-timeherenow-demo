@@ -1,8 +1,8 @@
-# TimeHereNow Test API - Demo Branch
+# TimeHereNow Test API
 
 ![TimeHereNow Banner](banner.png)
 
-A demo version of the TimeHereNow API client for testing RODiT authentication.
+TimeHereNow API client for testing RODiT authentication.
 
 **Version:** 2025.11.08  
 **API Version:** 20251023  
