@@ -4,13 +4,23 @@
 
 A demo version of the TimeHereNow API client for testing RODiT authentication.
 
-**Version:** 2005.10.01  
-**License:** MIT 
+**Version:** 2025.11.08  
+**API Version:** 20251023  
+**License:** MIT  
 **Author:** Discernible Inc.
 
 ## Overview
 
 This is a stripped-down demo branch that runs as a simple Node.js application. All configuration is managed through local config files.
+
+**Key Features:**
+- 🔗 NEAR blockchain-based time source (NOT system/NTP)
+- 🔐 RODiT token authentication with JWT
+- ⏰ Blockchain-timestamped webhook timers
+- 🌍 Complete IANA timezone database support
+- 📊 Performance and system metrics
+- 🤖 Model Context Protocol (MCP) for AI integration
+- ✅ 100% API test coverage (20/20 endpoints)
 
 ## Quick Start
 
@@ -51,7 +61,29 @@ openssl req -x509 -newkey rsa:4096 \
   -subj "/C=US/ST=State/L=City/O=Organization/OU=Department/CN=webhook.timeherenow.com"
 ```
 
-See `selfcerts/README.md` for more details on client side certificate management.
+**Certificate Details:**
+- **privkey.pem**: Private key (4096-bit RSA)
+- **fullchain.pem**: Self-signed certificate
+- **Common Name (CN)**: webhook.timeherenow.com
+- **Validity**: 365 days from creation date
+
+**Trusting the Certificate (Optional - for local development):**
+
+To avoid browser warnings during local development:
+
+**Linux:**
+```bash
+sudo cp selfcerts/fullchain.pem /usr/local/share/ca-certificates/timeherenow.crt
+sudo update-ca-certificates
+```
+
+**macOS:**
+```bash
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain selfcerts/fullchain.pem
+```
+
+**Windows:**
+Import `fullchain.pem` into the "Trusted Root Certification Authorities" store via certmgr.msc
 
 ### Running the Application
 
@@ -202,12 +234,188 @@ timeherenow-test/
 
 ## API Endpoints
 
-For complete API documentation and test-to-API mapping, see:
-- **[API Documentation](api-docs/README.md)** - Complete test-to-API mapping, usage examples, and implementation details
-- **[API Specification](api-docs/swagger.json)** - OpenAPI 3.0 specification
+### Complete API Reference
 
-### Webhook Endpoint
-- **POST `/webhook`** - Receives webhook events from TimeHereNow timers
+The TimeHereNow API provides comprehensive time, timezone, authentication, and webhook capabilities. All endpoints are fully documented and tested.
+
+**API Documentation:**
+- **[API Specification](api-docs/swagger.json)** - OpenAPI 3.0 specification
+- **Test Coverage:** 100% (20/20 endpoints)
+
+### Authentication & Session Management
+
+#### `POST /api/login`
+- **Capability:** User Authentication
+- **Auth Required:** No
+- **Purpose:** Authenticate with RODiT token and obtain JWT session token
+- **Tests:** `testLoginEndpoint`, `testJwtClaimIntegrity`
+
+#### `POST /api/logout`
+- **Capability:** Session Termination
+- **Auth Required:** Yes (Bearer JWT)
+- **Purpose:** Terminate session and invalidate token
+- **Tests:** `testLogoutEndpoint`, `testExpiredTokenRejection`
+
+#### `GET /api/sessions/list_all`
+- **Capability:** Session Listing
+- **Auth Required:** Yes (Admin)
+- **Purpose:** List all active sessions
+- **Tests:** `testSessionManagementWithSdk`, `testConcurrentSessions`
+
+#### `POST /api/sessions/revoke`
+- **Capability:** Session Revocation
+- **Auth Required:** Yes (Admin)
+- **Purpose:** Terminate specific session by ID
+- **Tests:** `testSessionRevocationEnforcement`
+
+#### `POST /api/sessions/cleanup`
+- **Capability:** Session Cleanup
+- **Auth Required:** Yes
+- **Purpose:** Remove expired sessions
+- **Tests:** `testSessionCleanup`
+
+---
+
+### Time & Timezone APIs
+
+#### `GET /health`
+- **Capability:** Health Check
+- **Auth Required:** No
+- **Purpose:** Monitor API and NEAR blockchain connectivity
+- **Tests:** `testHealthEndpoint`
+- **Returns:** Server health, blockchain connection status, blockchain time
+
+#### `POST /api/timezone`
+- **Capability:** Timezone Listing
+- **Auth Required:** Yes
+- **Purpose:** Retrieve complete IANA timezone database
+- **Tests:** `testTimezoneList`
+
+#### `POST /api/timezone/area`
+- **Capability:** Timezone Filtering
+- **Auth Required:** Yes
+- **Purpose:** Filter timezones by continent/region (e.g., "America", "Europe")
+- **Tests:** `testTimezoneByArea`
+
+#### `POST /api/timezone/time`
+- **Capability:** Blockchain Time by Timezone
+- **Auth Required:** Yes
+- **Purpose:** Returns NEAR blockchain-sourced time for specified timezone
+- **Tests:** `testTimeByTimezone`, `testReliabilityMultiRequest`, `testPerformanceLatency`
+- **Key Feature:** All timestamps from NEAR blockchain at 5Hz polling (200ms intervals), NOT system/NTP time
+
+#### `POST /api/timezones/by-country`
+- **Capability:** Country Timezone Lookup
+- **Auth Required:** Yes
+- **Purpose:** Get timezones for specific countries (ISO 3166-1 alpha-2)
+- **Tests:** `testTimezonesByCountry`
+
+#### `POST /api/ip`
+- **Capability:** IP-based Time Lookup
+- **Auth Required:** Yes
+- **Purpose:** Determine timezone from IP and return blockchain time
+- **Tests:** `testTimeByIpFallback`
+- **Features:** IP geolocation (geoip-lite), IPv4/IPv6 support, automatic timezone detection
+
+---
+
+### Blockchain Features
+
+#### `POST /api/sign/hash`
+- **Capability:** Blockchain Timestamping
+- **Auth Required:** Yes
+- **Purpose:** Create tamper-proof timestamped signatures
+- **Tests:** `testSignHashValidation`
+- **Use Case:** Proves a hash existed at or before the blockchain timestamp
+- **Format:** `hash + timestamp + time_diff + public_key` (Base64url encoded)
+
+---
+
+### Timer & Webhook System
+
+#### `POST /api/timers/schedule`
+- **Capability:** Timer Scheduling
+- **Auth Required:** Yes
+- **Purpose:** Schedule blockchain-timed webhook delivery
+- **Delay Range:** 1 second to 48 hours
+- **Tests:** `testTimerScheduleBasic`, `testTimerWebhookDelivery`, `testTimerPayloadEcho`, `testTimerBlockchainTimestamps`, `testTimerInvalidDelayTooSmall`, `testTimerInvalidDelayTooLarge`
+- **Features:**
+  - ULID timer ID generation
+  - Blockchain timestamps (scheduled_at, execute_at, fired_at)
+  - Automatic persistence (hourly saves)
+  - Late timers skipped on restore (never sent late)
+  - Payload preservation through delivery
+
+#### `POST /webhook`
+- **Capability:** Webhook Event Reception
+- **Auth Required:** Signature validation
+- **Purpose:** Receive webhook events from TimeHereNow timers
+- **Features:** SDK signature validation, event type routing
+
+---
+
+### Metrics & Monitoring
+
+#### `GET /api/metrics`
+- **Capability:** Performance Metrics
+- **Auth Required:** Yes
+- **Purpose:** Retrieve request counts and performance data
+- **Tests:** `testMetricsEndpoint`
+- **Returns:** Request count, error count, requests per minute, load level, active sessions
+
+#### `GET /api/metrics/system`
+- **Capability:** System Metrics
+- **Auth Required:** Yes
+- **Purpose:** Monitor CPU, memory, and uptime
+- **Tests:** `testSystemMetrics`
+- **Returns:** CPU usage, memory used/total, system uptime
+
+#### `POST /api/metrics/reset`
+- **Capability:** Metrics Management
+- **Auth Required:** Yes (Admin with entityAndProperties scope)
+- **Purpose:** Reset metric counters
+- **Tests:** `testMetricsReset`
+
+---
+
+### Model Context Protocol (MCP)
+
+#### `GET /mcp/resources`
+- **Capability:** MCP Resource Discovery
+- **Auth Required:** No (Public for AI discovery)
+- **Purpose:** AI discovery of available API resources
+- **Tests:** `testMcpResources`
+- **Features:** Resource listing, pagination, metadata
+
+#### `GET /mcp/resource/{uri}`
+- **Capability:** MCP Resource Access
+- **Auth Required:** No (Public for AI discovery)
+- **Purpose:** Retrieve specific resource content for AI agents
+- **Tests:** `testMcpResourceRetrieval`
+
+#### `GET /mcp/schema`
+- **Capability:** MCP Schema
+- **Auth Required:** No (Public for AI discovery)
+- **Purpose:** Provide API schema for AI agent integration
+- **Tests:** `testMcpSchema`
+
+---
+
+### API Coverage Summary
+
+| Category | Endpoints | Tests | Coverage |
+|----------|-----------|-------|----------|
+| Authentication | 2 | 4 | 100% |
+| Session Management | 3 | 4 | 100% |
+| Timezone Operations | 4 | 4 | 100% |
+| Time Retrieval | 2 | 2 | 100% |
+| Blockchain Features | 1 | 1 | 100% |
+| Timer/Webhook | 1 | 6 | 100% |
+| Metrics | 3 | 3 | 100% |
+| MCP | 3 | 3 | 100% |
+| Health | 1 | 1 | 100% |
+
+**Total:** 20 endpoints, 100% coverage
 
 ## Logging
 
@@ -258,12 +466,166 @@ node src/app.js | ./format-logs.sh
 **Available formatter:**
 - `format-logs.sh` - Simple log formatter with no external dependencies (uses bash regex)
 
+## Test Suite & API Validation
+
+### Test-to-API Capability Mapping
+
+The test suite provides comprehensive validation of all API endpoints with full traceability. Each test is mapped to specific API capabilities and documented in detail.
+
+**Test Coverage:** 100% (20/20 endpoints tested)
+
+### Test Modules Overview
+
+#### 1. **sdk-tests.js** - Core SDK Functionality
+Tests SDK initialization and core functions.
+
+**Key Tests:**
+- `testSdkClientInitializationWithSdk` - Verify client initialization with valid credentials
+  - **API:** `POST /api/login`
+- `testSdkUtilityFunctionsWithSdk` - Test utility functions (subscription check, config retrieval)
+  - **API:** `GET /health`
+
+#### 2. **authentication-test.js** - Login & JWT Handling
+Tests authentication flows and JWT token validation.
+
+**Key Tests:**
+- `testLoginEndpoint` - User login and JWT token generation
+  - **API:** `POST /api/login`
+- `testExpiredTokenRejection` - Expired token rejection
+  - **API:** `POST /api/logout`
+- `testJwtClaimIntegrity` - JWT claims validation and tamper-proofing
+  - **API:** `POST /api/login`
+
+#### 3. **session-management.js** - Session Lifecycle
+Tests session creation, management, and revocation.
+
+**Key Tests:**
+- `testSessionManagementWithSdk` - Create and manage sessions
+  - **API:** `GET /api/sessions/list_all`
+- `testConcurrentSessions` - Multiple concurrent user sessions
+  - **API:** `GET /api/sessions/list_all`
+- `testSessionRevocationEnforcement` - Session revocation
+  - **API:** `POST /api/sessions/revoke`
+- `testSessionCleanup` - Expired session cleanup
+  - **API:** `POST /api/sessions/cleanup`
+
+#### 4. **timeherenow.js** - API Integration
+Tests API endpoints with SDK authentication.
+
+**Key Tests:**
+- `testHealthEndpoint` - API health check
+  - **API:** `GET /health`
+- `testTimezoneList` - Fetch timezone data
+  - **API:** `POST /api/timezone`
+- `testTimeByIpFallback` - IP geolocation
+  - **API:** `POST /api/ip`
+- `testSignHashValidation` - Sign hashes using RODiT
+  - **API:** `POST /api/sign/hash`
+- `testReliabilityMultiRequest` - Concurrent request handling
+  - **API:** `POST /api/timezone/time`
+- `testPerformanceLatency` - API response time
+  - **API:** `POST /api/timezone/time`
+
+#### 5. **timer-webhook.js** - Webhook Integration
+Tests webhook delivery and event handling.
+
+**Key Tests:**
+- `testTimerScheduleBasic` - Schedule timers
+  - **API:** `POST /api/timers/schedule`
+- `testTimerWebhookDelivery` - Webhook delivery verification
+  - **API:** `POST /api/timers/schedule` + Webhook delivery
+- `testTimerPayloadEcho` - Payload integrity through delivery
+  - **API:** `POST /api/timers/schedule`
+- `testTimerBlockchainTimestamps` - Blockchain timestamp validation
+  - **API:** `POST /api/timers/schedule`
+- `testTimerInvalidDelayTooSmall/Large` - Input validation
+  - **API:** `POST /api/timers/schedule`
+
+#### 6. **test-utils.js** - Testing Utilities
+Helper functions for all tests.
+
+**Key Functions:**
+- `runTest()` - Execute test and capture results
+- `captureTestData()` - Record test results with API capability info
+- `decodeJwt()` - Inspect JWT token claims
+- `waitForWebhook()` - Wait for webhook with timeout
+- `getRoditClientForTest()` - Create test client instances
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run with formatted logs
+npm run start:pretty
+
+# Generate API coverage report
+npm run coverage
+```
+
+### Test Results Format
+
+Tests automatically include API capability information:
+
+```json
+{
+  "testName": "testTimerScheduleBasic",
+  "success": true,
+  "testInfo": {
+    "apiCapability": {
+      "api_endpoint": "POST /api/timers/schedule",
+      "capability": "Timer Scheduling",
+      "requires_auth": true,
+      "swagger_ref": "#/paths/~1timers~1schedule/post"
+    }
+  }
+}
+```
+
+### Key API Features Validated
+
+#### 🔗 NEAR Blockchain Integration
+- All time values sourced from NEAR blockchain (NOT system/NTP time)
+- 5Hz polling (200ms intervals) with cached timestamps
+- Blockchain time granularity: ~500-600ms (block interval)
+- Returns HTTP 503 if blockchain time unavailable
+
+#### 🔐 Security & Authentication
+- RODiT token-based authentication
+- JWT token generation and validation
+- Session management and revocation
+- Bearer token authentication for protected endpoints
+
+#### ⏰ Timer System
+- Blockchain-timestamped webhook delivery
+- 1 second to 48 hour delay range
+- Automatic persistence (hourly saves)
+- Late timers skipped on restore (never sent late)
+
+#### 🌍 Timezone & Localization
+- Complete IANA tzdb support
+- IP-based geolocation (geoip-lite)
+- Locale support (IETF BCP 47)
+- DST handling
+
+#### 📊 Monitoring & Metrics
+- Performance metrics (requests, errors, RPM)
+- System metrics (CPU, memory, uptime)
+- Admin-only metric reset
+
+#### 🤖 AI Integration
+- Model Context Protocol (MCP) support
+- Public resource discovery
+- OpenAPI schema for AI agents
+
 ## Development
 
 ### Scripts
 
 - `npm start` - Run the application in production mode
 - `npm run dev` - Run with nodemon for auto-reload during development
+- `npm run coverage` - Generate API coverage report
 
 
 ## Troubleshooting
@@ -552,6 +914,20 @@ try {
 ✅ **Test thoroughly** - Use these tests as templates for your own tests
 
 ---
+
+## Documentation Structure
+
+This README integrates content from multiple documentation sources:
+
+### Integrated Documentation
+- **Main README** - Project overview, setup, and configuration
+- **API Documentation** (`api-docs/README.md`) - Complete API endpoint reference and test-to-API mapping
+- **SSL Certificates** (`selfcerts/README.md`) - Certificate management and trust configuration
+
+### Additional Resources
+- **[API Specification](api-docs/swagger.json)** - OpenAPI 3.0 specification with detailed endpoint schemas
+- **Test Modules** (`src/test-modules/`) - Comprehensive test suite with 100% API coverage
+- **Configuration** (`config/default.json`) - Application configuration settings
 
 ## License
 

@@ -23,7 +23,7 @@
     "jose": "^4.15.9"
   },
   "name": "timeherenow",
-  "version": "2005.10.01",
+  "version": "2025.11.08",
   "description": "Description",
   "main": "app.js",
   "scripts": {
