@@ -11,7 +11,7 @@ TimeHereNow API client for testing RODiT authentication.
 
 ## Overview
 
-This is a stripped-down demo branch that runs as a simple Node.js application. All configuration is managed through local config files.
+This runs as a simple Node.js application. All configuration is managed through local config files.
 
 **Key Features:**
 - 🔗 NEAR blockchain-based time source (NOT system/NTP)
@@ -960,7 +960,7 @@ Tests automatically include API capability information:
 - Returns HTTP 503 if blockchain time unavailable
 
 #### 🔐 Security & Authentication
-- RODiT token-based authentication
+- RODiT token-based mutual authentication
 - JWT token generation and validation
 - Session management and revocation
 - Bearer token authentication for protected endpoints

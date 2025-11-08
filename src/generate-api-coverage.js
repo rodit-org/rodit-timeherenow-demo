@@ -76,7 +76,7 @@ function generateCoverageReport() {
   console.log('  - Blockchain time granularity: ~500-600ms\n');
   
   console.log('✓ Security & Authentication');
-  console.log('  - RODiT token-based authentication');
+  console.log('  - RODiT token-based mutual authentication');
   console.log('  - JWT token generation and validation');
   console.log('  - Session management and revocation\n');
   
