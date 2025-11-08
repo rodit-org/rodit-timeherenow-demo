@@ -297,6 +297,247 @@ The generated credentials file should contain:
 
 **Security Note:** Keep your private key secure and never commit it to version control. The `.near-credentials` directory should be in your `.gitignore`.
 
+---
+
+## Using the RODiT Wallet Script
+
+The `roditwallet.sh` script provides a convenient command-line interface for managing NEAR accounts and RODiT tokens. This script simplifies common operations like viewing account balances, listing RODiTs, transferring tokens, and managing accounts.
+
+### Prerequisites
+
+Before using `roditwallet.sh`, you need to:
+
+1. **Install near-cli-rs** (see [Installing near-cli-rs](#installing-near-cli-rs) section above)
+2. **Set up required environment variables** in your `.bashrc` or `.bash_profile`:
+
+```bash
+# Add these lines to ~/.bashrc or ~/.bash_profile
+export BLOCKCHAIN_ENV="mainnet"  # or "testnet" for testing
+export RODITCONTRACTID="roditcorp-com.near"  # The RODiT smart contract address
+
+# Optional: Override the default network configuration
+# export NEAR_NETWORK_CONFIG="mainnet-lava"  # For better reliability
+
+# Make the script executable (run once)
+chmod +x /path/to/roditwallet.sh
+```
+
+3. **Reload your shell configuration:**
+```bash
+source ~/.bashrc
+```
+
+### Available Network Configurations
+
+The script supports multiple NEAR RPC endpoints for better reliability:
+
+- **mainnet-fastnear** (default) - FastNEAR mainnet endpoint
+- **mainnet-lava** - Lava Network mainnet (recommended for reliability)
+- **testnet-fastnear** - FastNEAR testnet endpoint
+- **testnet-lava** - Lava Network testnet
+
+To use a specific network configuration:
+```bash
+export NEAR_NETWORK_CONFIG="mainnet-lava"
+```
+
+To see all available network configurations:
+```bash
+near config show-connections
+```
+
+### Basic Usage
+
+#### 1. View Help
+```bash
+./roditwallet.sh help
+```
+
+#### 2. List All Available Accounts
+```bash
+./roditwallet.sh
+```
+This displays all NEAR accounts found in `~/.near-credentials/mainnet/` (or testnet).
+
+#### 3. View Account Balance and RODiTs
+```bash
+./roditwallet.sh <account_id>
+```
+Example:
+```bash
+./roditwallet.sh your-account.near
+```
+This shows:
+- All RODiT token IDs owned by the account
+- Account balance in NEAR
+
+#### 4. View Specific RODiT Details
+```bash
+./roditwallet.sh <account_id> <rodit_id>
+```
+Example:
+```bash
+./roditwallet.sh your-account.near 1234
+```
+This displays the complete metadata for the specified RODiT token.
+
+#### 5. View Account Keys
+```bash
+./roditwallet.sh <account_id> keys
+```
+Example:
+```bash
+./roditwallet.sh your-account.near keys
+```
+This displays:
+- Private key (Base58 format)
+- Implicit account ID (Hex format)
+
+**⚠️ Security Warning:** Never share your private key. Keep this information secure.
+
+#### 6. Generate a New Account
+```bash
+./roditwallet.sh genaccount
+```
+This creates a new uninitialized NEAR account and saves the credentials to `~/.near-credentials/$BLOCKCHAIN_ENV/`.
+
+**Note:** The account won't exist on the blockchain until it's initialized with at least 0.01 NEAR.
+
+#### 7. Initialize an Account
+```bash
+./roditwallet.sh <funding_account_id> <new_account_id> init
+```
+Example:
+```bash
+./roditwallet.sh your-funded-account.near abc123...def456 init
+```
+This sends 0.01 NEAR from the funding account to initialize the new account on the blockchain.
+
+#### 8. Transfer a RODiT Token
+```bash
+./roditwallet.sh <sender_account_id> <receiver_account_id> <rodit_id>
+```
+Example:
+```bash
+./roditwallet.sh your-account.near recipient.near 1234
+```
+This transfers RODiT token #1234 from your account to the recipient.
+
+### Account ID Formats
+
+The script supports two types of NEAR account IDs:
+
+1. **Implicit Accounts** (64 hex characters):
+   ```
+   abc123def456...xyz789
+   ```
+
+2. **Named Accounts**:
+   ```
+   your-account.near
+   subaccount.your-account.near
+   ```
+
+### Error Handling and Retry Logic
+
+The script includes automatic retry logic for network errors:
+- **Max retries:** 3 attempts
+- **Retry delay:** 2 seconds between attempts
+- Automatically retries on network failures
+- Non-network errors are reported immediately
+
+### Common Use Cases
+
+#### Setting Up a New Account for TimeHereNow
+
+1. Generate a new account:
+   ```bash
+   ./roditwallet.sh genaccount
+   ```
+
+2. Note the account ID displayed
+
+3. Initialize it with NEAR from an existing funded account:
+   ```bash
+   ./roditwallet.sh your-funded-account.near <new_account_id> init
+   ```
+
+4. Verify the account is initialized:
+   ```bash
+   ./roditwallet.sh <new_account_id>
+   ```
+
+5. Use this account to purchase a TimeHereNow RODiT at [https://purchase.timeherenow.com](https://purchase.timeherenow.com)
+
+#### Checking Your RODiT Tokens
+
+```bash
+# List all RODiTs for your account
+./roditwallet.sh your-account.near
+
+# View detailed metadata for a specific RODiT
+./roditwallet.sh your-account.near 1234
+```
+
+#### Transferring RODiT to Another Account
+
+```bash
+# Transfer RODiT #1234 to another account
+./roditwallet.sh your-account.near recipient.near 1234
+```
+
+### Troubleshooting
+
+#### "ERROR: Invalid account ID format"
+- Ensure your account ID is either:
+  - A 64-character hex string (implicit account), or
+  - A valid named account (e.g., `user.near`)
+
+#### "ERROR: Key file not found for account"
+- The account credentials don't exist in `~/.near-credentials/$BLOCKCHAIN_ENV/`
+- Generate or import the account first
+
+#### "WARNING: Failed to fetch RODiT tokens after 3 attempts"
+- Network connectivity issues
+- RPC endpoint may be unavailable (try switching to `mainnet-lava`)
+- Rate limits on free tier endpoints
+
+#### "The account does not exist in the blockchain"
+- The account hasn't been initialized with NEAR
+- Use the `init` command to fund it with at least 0.01 NEAR
+
+#### Environment variables not set
+If you see errors about missing environment variables:
+```bash
+# Check if variables are set
+echo $BLOCKCHAIN_ENV
+echo $RODITCONTRACTID
+
+# If empty, add to ~/.bashrc and reload
+source ~/.bashrc
+```
+
+### Script Configuration
+
+The script uses the following configuration:
+- **Credentials location:** `~/.near-credentials/$BLOCKCHAIN_ENV/`
+- **Accounts registry:** `~/.near-credentials/accounts.json`
+- **Default network:** Based on `$BLOCKCHAIN_ENV` (mainnet or testnet)
+- **Max retries:** 3 attempts for network operations
+- **Retry delay:** 2 seconds between attempts
+
+### Security Best Practices
+
+1. **Never share your private keys** - The `keys` command displays sensitive information
+2. **Keep credentials secure** - The `~/.near-credentials/` directory contains your private keys
+3. **Use appropriate permissions** - Ensure only you can read credential files:
+   ```bash
+   chmod 600 ~/.near-credentials/$BLOCKCHAIN_ENV/*.json
+   ```
+4. **Backup your credentials** - Store encrypted backups of your credential files
+5. **Use testnet for testing** - Test operations on testnet before using mainnet
+
+---
 
 ### Purchasing a TimeHereNow RODiT
 
@@ -763,7 +1004,7 @@ Ensure your credentials file exists and is valid JSON at the path specified in `
 
 ## Support
 
-For issues or questions, contact Discernible Inc at support@discernible.com
+For issues or questions, contact Discernible Inc at support@discernible.io
 
 ---
 
