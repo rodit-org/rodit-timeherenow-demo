@@ -24,66 +24,147 @@ This is a stripped-down demo branch that runs as a simple Node.js application. A
 
 ## Quick Start
 
-### Prerequisites
+Follow these steps in order to set up and run the TimeHereNow API:
 
-- Node.js 20.x or higher
-- npm
-- NEAR credentials file (for RODiT authentication)
+### Step 1: Clone the Repository
 
-### Installation
-
-1. Clone the repository:
 ```bash
 git clone https://github.com/cableguard/timeherenow.git
 cd timeherenow
 ```
 
-2. Install dependencies:
+### Step 2: Install Dependencies
+
+**Prerequisites:**
+- Node.js 20.x or higher
+- npm
+
 ```bash
 npm install
 ```
 
-3. Configure your environment:
-   - Edit `config/default.json` to set your configuration values
-   - Place your NEAR credentials in `timeherenow.json`
+### Step 3: Install near-cli-rs
 
-4. Create required directories:
+Install the NEAR CLI tool to manage your NEAR account credentials.
+
+**On Linux/macOS:**
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+```
+
+**On Windows:**
+```powershell
+irm https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.ps1 | iex
+```
+
+**Using Cargo (Rust package manager):**
+```bash
+cargo install near-cli-rs
+```
+
+**Verify installation:**
+```bash
+near --version
+```
+
+### Step 4: Generate NEAR Implicit Account
+
+Create a NEAR implicit account for RODiT authentication. See the [NEAR Credentials Setup](#near-credentials-setup) section for detailed instructions.
+
+**Quick command:**
+```bash
+near account import-account using-seed-phrase 'your seed phrase here' \
+  network-config mainnet
+```
+
+Your credentials will be stored at:
+```
+~/.near-credentials/mainnet/YOUR_IMPLICIT_ACCOUNT_ID.json
+```
+
+### Step 5: Configure the Application
+
+Edit `config/default.json` to set your configuration:
+
+```json
+{
+  "NEAR_CONTRACT_ID": "roditcorp-com.near",
+  "RODIT_NEAR_CREDENTIALS_SOURCE": "file",
+  "NEAR_CREDENTIALS_FILE_PATH": "/FULL_PATH/.near-credentials/mainnet/timeherenow.json",
+  "NEAR_RPC_URL": "https://near.lava.build:443",
+  "LOG_LEVEL": "info"
+}
+```
+
+**Important:** Update `NEAR_CREDENTIALS_FILE_PATH` with the full path to your credentials file.
+
+### Step 6: Create Required Directories
+
 ```bash
 mkdir -p logs data .near-credentials/mainnet selfcerts
 ```
 
-5. Generate self-signed SSL certificates (for HTTPS):
+### Step 7: Generate Self-Signed SSL Certificates
+
+Generate SSL certificates for HTTPS (required for webhooks):
+
 ```bash
 openssl req -x509 -newkey rsa:4096 \
   -keyout selfcerts/privkey.pem \
   -out selfcerts/fullchain.pem \
   -days 365 -nodes \
-  -subj "/C=US/ST=State/L=City/O=Organization/OU=Department/CN=webhook.timeherenow.com"
+  -subj "/C=US/ST=State/L=City/O=Organization/OU=Department/CN=YOUR_DOMAIN_OR_IP"
 ```
 
 **Certificate Details:**
 - **privkey.pem**: Private key (4096-bit RSA)
 - **fullchain.pem**: Self-signed certificate
-- **Common Name (CN)**: webhook.timeherenow.com
+- **Common Name (CN)**: YOUR_DOMAIN_OR_IP (use your domain or public IP)
 - **Validity**: 365 days from creation date
 
-**Trusting the Certificate (Optional - for local development):**
+**Important:** The CN (Common Name) should match the URL you'll use to receive webhooks.
 
-To avoid browser warnings during local development:
+### Step 8: Purchase a TimeHereNow RODiT
 
-**Linux:**
+Visit [https://purchase.timeherenow.com](https://purchase.timeherenow.com) to purchase your RODiT token.
+
+**You'll need:**
+- A NEAR-compatible wallet (MyNearWallet, Meteor Wallet, etc.)
+- Your NEAR implicit account from Step 4
+- Your webhook URL (matching the CN from Step 7)
+
+See the [Purchasing a TimeHereNow RODiT](#purchasing-a-timeherenow-rodit) section for detailed instructions.
+
+### Step 9: Test the API
+
+Start the application:
 ```bash
-sudo cp selfcerts/fullchain.pem /usr/local/share/ca-certificates/timeherenow.crt
-sudo update-ca-certificates
+npm start
 ```
 
-**macOS:**
+**For human-readable formatted logs:**
 ```bash
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain selfcerts/fullchain.pem
+npm run start:pretty
 ```
 
-**Windows:**
-Import `fullchain.pem` into the "Trusted Root Certification Authorities" store via certmgr.msc
+**Or for development with auto-reload:**
+```bash
+npm run dev
+npm run dev:pretty  # with formatted logs
+```
+
+The API will start on the URL and port specified in your RODiT metadata.
+
+**Run the test suite:**
+```bash
+npm test
+```
+
+This will validate all API endpoints and verify your setup is working correctly.
+
+---
+
+## Detailed Setup Instructions
 
 ### Running the Application
 
@@ -123,7 +204,7 @@ Edit `config/default.json` to customize:
 {
   "NEAR_CONTRACT_ID": "roditcorp-com.near",
   "RODIT_NEAR_CREDENTIALS_SOURCE": "file",
-  "NEAR_CREDENTIALS_FILE_PATH": "/home/icarus40/.near-credentials/mainnet/timeherenow.json",
+  "NEAR_CREDENTIALS_FILE_PATH": "/FULL_PATH/.near-credentials/mainnet/timeherenow.json",
   "NEAR_RPC_URL": "https://near.lava.build:443",
   "LOG_LEVEL": "info"
 }
@@ -131,7 +212,7 @@ Edit `config/default.json` to customize:
 
 ### NEAR Credentials Setup
 
-You need a NEAR credentials file for RODiT authentication.
+Before purchasing your RODiT, you need to set up NEAR credentials for authentication.
 
 #### Installing near-cli-rs
 
@@ -208,13 +289,59 @@ You need a NEAR credentials file for RODiT authentication.
 The generated credentials file should contain:
 ```json
 {
-  "account_id": "your-account.near",
+  "account_id": "IMPLICIT_ACCOUNT_ID",
   "public_key": "ed25519:...",
   "private_key": "ed25519:..."
 }
 ```
 
 **Security Note:** Keep your private key secure and never commit it to version control. The `.near-credentials` directory should be in your `.gitignore`.
+
+
+### Purchasing a TimeHereNow RODiT
+
+Before you can use this API, you need to purchase a TimeHereNow RODiT token on the NEAR blockchain.
+
+#### What is a RODiT?
+
+A RODiT (Rights On Distributed Infrastructure Token) is a blockchain-based access token that grants you the right to use the TimeHereNow API. Your RODiT token contains:
+- Your API endpoint URL and port
+- Webhook configuration
+- Access permissions and subscription details
+- Authentication credentials
+
+#### How to Purchase
+
+1. **Visit the purchase page:**
+   ```
+   https://purchase.timeherenow.com
+   ```
+
+2. **Connect your NEAR wallet:**
+   - You'll need a NEAR-compatible wallet such as:
+     - **NEAR Wallet** (wallet.near.org)
+     - **MyNearWallet** (mynearwallet.com)
+     - **Meteor Wallet** (meteorwallet.app)
+     - **Sender Wallet** (senderwallet.io)
+     - **HERE Wallet** (herewallet.app)
+
+3. **Complete the purchase:**
+   - Follow the on-screen instructions to purchase your RODiT
+   - The RODiT will be minted to your NEAR account
+   - You'll receive your API endpoint URL and configuration details
+
+4. **Note your credentials:**
+   - After purchase, you'll receive:
+     - Your unique API endpoint URL (e.g., `https://webhook.timeherenow.com:3444`)
+     - Your NEAR account ID (implicit account)
+     - Configuration metadata for your RODiT
+
+#### Important Notes
+
+- **One RODiT per account:** Each NEAR account can hold one TimeHereNow RODiT
+- **Implicit accounts recommended:** Use a NEAR implicit account for easier credential management
+- **Webhook URL:** Your RODiT metadata includes your webhook URL - this is where timer events will be delivered
+- **API endpoint:** The URL and port specified in your RODiT is where your API instance should run
 
 ## Project Structure
 
