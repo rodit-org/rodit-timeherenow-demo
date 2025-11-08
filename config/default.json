@@ -1,0 +1,7 @@
+{
+  "NEAR_CONTRACT_ID": "roditcorp-com.near",
+  "RODIT_NEAR_CREDENTIALS_SOURCE": "file",
+  "NEAR_CREDENTIALS_FILE_PATH": "/home/icarus40/.near-credentials/mainnet/timeherenow.json",
+  "NEAR_RPC_URL": "https://near.lava.build:443",
+  "LOG_LEVEL": "info"
+}

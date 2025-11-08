@@ -1,0 +1,407 @@
+// app.js
+const crypto = require("crypto");
+const https = require("https");
+const fs = require("fs");
+const path = require("path");
+const express = require("express");
+const { ulid } = require("ulid");
+
+// Import from @rodit/rodit-auth-be package directly
+const { 
+  RoditClient,
+  roditManager, 
+  stateManager, 
+  blockchainService,
+} = require('@rodit/rodit-auth-be');
+
+const tempClient = new RoditClient();
+const logger = tempClient.getLogger();
+const { createLogContext, logErrorWithMetrics } = logger;
+const loggingmw = tempClient.getLoggingMiddleware();
+
+// Import additional SDK services
+const config = tempClient.getConfig();
+
+// Initialize Express app
+const app = express();
+
+// Log application startup
+logger.info("Starting RODiT Authentication API Server", {
+  nodeEnv: process.env.NODE_ENV || "development",
+  pid: process.pid,
+  version: process.env.npm_package_version,
+  nodeVersion: process.version,
+});
+
+// Apply logging middleware
+app.use(loggingmw);
+
+// Test endpoint for verifying logging functionality
+app.get('/api/test/logging', (req, res) => {
+  try {
+    // Test different log levels
+    logger.debug('This is a DEBUG level message', { test: 'debug', timestamp: new Date().toISOString() });
+    logger.info('This is an INFO level message', { test: 'info', timestamp: new Date().toISOString() });
+    logger.warn('This is a WARN level message', { test: 'warn', timestamp: new Date().toISOString() });
+    logger.error('This is an ERROR level message', { 
+      test: 'error', 
+      timestamp: new Date().toISOString(),
+      error: new Error('Test error with stack trace')
+    });
+
+    // Test structured logging with context
+    logger.infoWithContext('Structured log with context', {
+      component: 'logging-test',
+      requestId: req.requestId || 'none',
+      testData: {
+        string: 'test string',
+        number: 42,
+        boolean: true,
+        array: [1, 2, 3],
+        object: { key: 'value' }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Test logs generated successfully',
+      requestId: req.requestId,
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    logger.error('Error in logging test endpoint', { 
+      error: error.message, 
+      stack: error.stack,
+      requestId: req.requestId 
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate test logs',
+      message: error.message,
+      requestId: req.requestId
+    });
+  }
+});
+
+// Request context and performance monitoring middleware
+app.use((req, res, next) => {
+  req.startTime = Date.now();
+  req.requestId = req.headers['x-request-id'] || req.headers['x-correlation-id'] || ulid();
+  req.traceId = req.headers['x-trace-id'] || crypto.randomUUID();
+  
+  // Add response tracking
+  res.on('finish', () => {
+    const duration = Date.now() - req.startTime;
+    
+    // Log performance metrics
+    logger.debugWithContext("Request performance metrics", {
+      component: "API",
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration,
+      requestId: req.requestId,
+      traceId: req.traceId,
+      userAgent: req.get('User-Agent'),
+      referer: req.get('Referer'),
+      contentLength: res.get('Content-Length'),
+      contentType: res.get('Content-Type')
+    });
+    
+    // Log metrics for monitoring systems
+    logger.metric('request_duration_ms', duration, {
+      method: req.method,
+      path: req.path,
+      status: res.statusCode
+    });
+  });
+  
+  next();
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  logger.error('Request error', {
+    error: {
+      message: err.message,
+      stack: err.stack,
+      ...(err.code && { code: err.code })
+    },
+    request: {
+      method: req.method,
+      url: req.originalUrl,
+      requestId: req.requestId,
+      traceId: req.traceId
+    }
+  });
+
+  res.status(500).json({
+    error: 'Internal Server Error',
+    requestId: req.requestId
+  });
+});
+
+// Import webhook functionality from SDK
+const webhookHandlerModule = tempClient.getWebhookHandler();
+const { 
+  createWebhookHandler,
+  WebhookEventHandlerFactory 
+} = webhookHandlerModule;
+
+// Import client and test system
+const { runSdkTests, runTestSuite, runSingleTest } = require("./test-system");
+
+// Import timer/webhook test utilities
+const { storeWebhook } = require("./test-modules/timer-webhook");
+
+// WEBHOOKPORT will be determined dynamically from RODiT token metadata
+
+// Create webhook handler with all necessary middleware
+const webhookHandler = createWebhookHandler(stateManager);
+
+// Apply webhook middleware to the app
+webhookHandler.applyMiddleware(app, express);
+
+// Create webhook event handler factory with dependencies
+const webhookEventHandlerFactory = new WebhookEventHandlerFactory({
+  configManager: null, // Will need to be implemented or imported
+  runTestSuite,
+  runSingleTest
+});
+
+// Set up the webhook route with authentication middleware
+app.post(
+  "/webhook",
+  // Use the authentication middleware from the webhook handler
+  webhookHandler.authenticationMiddleware,
+  
+  // Process the webhook event
+  async (req, res) => {
+    const requestId = req.webhookAuthResult?.requestId || crypto.randomUUID();
+    const logContext = {
+      requestId,
+      apiEndpoint: "/webhook",
+      method: "POST",
+      headers: Object.keys(req.headers),
+      bodyKeys: Object.keys(req.body || {}),
+      bodySize: req.rawBody ? req.rawBody.length : 0
+    };
+    
+    try {
+      // Process the webhook event using the SDK
+      const event = webhookHandler.processWebhookEvent(req, logContext);
+      
+      if (event.error) {
+        return res.status(400).json({ error: event.error });
+      }
+      
+      // Store webhook for test validation (if it has a test_id)
+      // Webhook structure: { event, data: { timer_id, payload: { test_id } } }
+      if (req.body && req.body.data && req.body.data.payload) {
+        storeWebhook(req.body.data);
+      }
+      
+      // Handle the event using the event handler factory
+      const result = await webhookEventHandlerFactory.handleEvent(event, req, res);
+      
+      // Send the response
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      logger.error("Error processing webhook", {
+        ...logContext,
+        error: error.message,
+        stack: error.stack
+      });
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// Start the server and run the client
+// Store the RoditClient instance and server
+let roditClient;
+let server;
+
+// Start the server
+async function startServer() {
+  try {
+    // Initialize the RODiT SDK and create RoditClient
+    roditClient = await RoditClient.create('client');
+    
+    logger.info(`RODiT SDK initialized successfully`, {
+      component: "server",
+      environment: "server"
+    });
+    
+    // Store the RoditClient in app.locals for test system access
+    app.locals.roditClient = roditClient;
+    
+    logger.info(`RoditClient stored in app.locals for test system`, {
+      component: "server",
+      hasRoditClient: !!app.locals.roditClient
+    });
+
+    // Get webhook URL from RODiT token metadata
+    const configOwnRodit = await stateManager.getConfigOwnRodit();
+    const webhookUrl = configOwnRodit?.own_rodit?.metadata?.webhook_url;
+    
+    if (!webhookUrl) {
+      throw new Error('webhook_url not found in RODiT token metadata');
+    }
+    
+    // Extract port from webhook URL (e.g., "https://webhook.timeherenow.com:3444")
+    const urlMatch = webhookUrl.match(/:([0-9]+)$/);
+    const WEBHOOKPORT = urlMatch ? parseInt(urlMatch[1], 10) : 443; // Default to 443 if no port specified
+    
+    logger.info(`Using webhook configuration from RODiT token`, {
+      component: "server",
+      webhookUrl,
+      port: WEBHOOKPORT
+    });
+
+    // Load SSL certificates
+    const httpsOptions = {
+      key: fs.readFileSync(path.join(__dirname, '../selfcerts/privkey.pem')),
+      cert: fs.readFileSync(path.join(__dirname, '../selfcerts/fullchain.pem'))
+    };
+
+    // Start the HTTPS server
+    server = https.createServer(httpsOptions, app).listen(WEBHOOKPORT, () => {
+      logger.info(`HTTPS Server started on port ${WEBHOOKPORT}`, {
+        component: "server",
+        environment: "server",
+        protocol: "https",
+        webhookUrl
+      });
+    });
+
+    // Graceful shutdown
+    process.on("SIGTERM", () => {
+      logger.info("SIGTERM signal received: closing HTTP server", {
+        component: "server"
+      });
+      server.close(() => {
+        logger.info("HTTP server closed", { component: "server" });
+        process.exit(0);
+      });
+    });
+
+    return server;
+  } catch (error) {
+    logger.error(`Error 907: Failed to start server: ${error.message}`, {
+      component: "server",
+      error: error.stack
+    });
+    process.exit(1);
+  }
+}
+
+// Start the server and then initialize test client
+(async () => {
+  try {
+    // First, start the server (this creates the RoditClient)
+    await startServer();
+    
+    // Now initialize the test client using the shared RoditClient
+    const serverContext = {
+      component: "client",
+      status: "initializing",
+      startTime: new Date().toISOString()
+    };
+
+    logger.info("Initializing RODiT configuration", serverContext);
+    
+    // Use the RoditClient already created and stored in app.locals by startServer()
+    if (!app.locals.roditClient) {
+      throw new Error('RoditClient not initialized by startServer()');
+    }
+    roditClient = app.locals.roditClient;
+    
+    logger.info("Using shared RoditClient from app.locals", {
+      component: "client",
+      status: "initialized"
+    });
+    
+    // Initialize performance service if available
+    if (blockchainService && blockchainService.performanceService) {
+      blockchainService.performanceService.initialize();
+    }
+    
+    logger.info("RODiT configuration initialized", {
+      component: "client",
+      status: "initialized"
+    });
+    
+    // Get and verify configuration
+    const configObject = await stateManager.getConfigOwnRodit();
+    if (!configObject) {
+      throw new Error("Failed to initialize RODiT configuration");
+    }
+    
+    // Run all tests (SDK and native) using the updated runSdkTests function
+    logger.info("Running all test suites", serverContext);
+    
+    // Run both SDK and native tests
+    const testResults = await runSdkTests(app).catch(error => {
+      logger.error("Error running tests", {
+        ...serverContext,
+        error: error.message,
+        stack: error.stack
+      });
+      return { error: error.message };
+    });
+    
+    // Log test results summary
+    if (testResults && !testResults.error) {
+      logger.info("All tests completed", {
+        ...serverContext,
+        sdkTestsSuccess: testResults.sdk?.success || false,
+        nativeTestsSuccess: testResults.native?.success || false
+      });
+    }
+
+    serverContext.status = "ready";
+    logger.info("Server ready to accept webhook requests", serverContext);
+  } catch (error) {
+    logger.error("Error during server startup", {
+      component: "client",
+      error: error.message,
+      stack: error.stack
+    });
+    process.exit(1);
+  }
+})();
+
+process.on("SIGINT", () => {
+  const shutdownContext = {
+    component: "client",
+    signal: "SIGINT",
+    shutdownTime: new Date().toISOString(),
+  };
+
+  logger.info("SIGINT signal received: closing HTTP server", shutdownContext);
+  server.close(() => {
+    logger.info("HTTP server closed", shutdownContext);
+    process.exit(0);
+  });
+});
+
+process.on("SIGTERM", () => {
+  const shutdownContext = {
+    component: "client",
+    signal: "SIGTERM",
+    shutdownTime: new Date().toISOString(),
+  };
+
+  logger.info("SIGTERM signal received: closing HTTP server", shutdownContext);
+  server.close(() => {
+    logger.info("HTTP server closed", shutdownContext);
+    process.exit(0);
+  });
+});
+
+// Export the app
+module.exports = {
+  app
+};

@@ -1,0 +1,28 @@
+timeherenow
+Copyright 2024 Discernible Inc
+
+This product includes software developed at Discernible Inc.
+
+This software contains third-party dependencies listed in package.json.
+Each dependency is subject to its own license terms and conditions.
+The Apache License 2.0 that governs this project does NOT apply to these
+third-party dependencies. Please refer to each dependency's respective
+license for terms of use.
+
+Third-party dependencies include but are not limited to:
+- bs58
+- borsh
+- @rodit/rodit-auth-be
+- body-parser
+- config
+- cors
+- express
+- express-rate-limit
+- jose
+- node-forge
+- tweetnacl
+- tweetnacl-util
+- ulid
+- winston
+
+For the complete list of dependencies and their versions, see package.json.

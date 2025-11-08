@@ -1,0 +1,969 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Time Here Now API",
+    "version": "20251023",
+    "description": "API to get the current time based on timezone or client IP. **IMPORTANT: All time values are sourced from NEAR blockchain, NOT system/NTP time.** The API polls NEAR blockchain at 5 Hz (200ms intervals) and serves cached blockchain timestamps. Time zones and offsets are sourced from the IANA Time Zone Database (tzdb). Returns HTTP 503 if blockchain time is unavailable."
+  },
+  "servers": [
+    { "url": "https://timeherenow.rodit.org:8443/api" },
+    { "url": "http://localhost:8080/api" }
+  ],
+  "externalDocs": {
+    "description": "IANA Time Zone Database (tzdb)",
+    "url": "https://www.iana.org/time-zones"
+  },
+  "paths": {
+    "/login": {
+      "post": {
+        "summary": "Authenticate and obtain session token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["roditToken"],
+                "properties": {
+                  "roditToken": { "type": "string", "description": "RODiT authentication token" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication successful",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LoginResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/logout": {
+      "post": {
+        "summary": "Terminate session",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Logout successful",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LogoutResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/signclient": {
+      "post": {
+        "summary": "Sign and mint a new RODiT client token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tobesignedValues", "mintingfee", "mintingfeeaccount"],
+                "properties": {
+                  "tobesignedValues": {
+                    "type": "object",
+                    "required": ["not_after", "max_requests", "maxrq_window", "permissioned_routes", "serviceprovider_signature"],
+                    "properties": {
+                      "not_after": { "type": "string", "description": "ISO 8601 timestamp for token expiration" },
+                      "max_requests": { "type": "number", "description": "Maximum number of requests allowed" },
+                      "maxrq_window": { "type": "number", "description": "Time window for max requests in seconds" },
+                      "permissioned_routes": { "type": "string", "description": "JSON string of permitted routes and permissions" },
+                      "serviceprovider_signature": { "type": "string", "description": "Service provider signature" }
+                    }
+                  },
+                  "mintingfee": { "type": "string", "description": "Fee for minting the token" },
+                  "mintingfeeaccount": { "type": "string", "description": "Account to receive the minting fee" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Token successfully minted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SignClientResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/timezone": {
+      "post": {
+        "summary": "a listing of all timezones.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "default": {
+            "$ref": "#/components/responses/SuccessfulListJsonResponse"
+          }
+        }
+      }
+    },
+    
+    "/timezone/area": {
+      "post": {
+        "summary": "a listing of all timezones available for that area.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["area"],
+                "properties": {
+                  "area": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/SuccessfulListJsonResponse" },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    
+    "/timezone/time": {
+      "post": {
+        "summary": "request the current time for a timezone (falls back to user IP if timezone is omitted).",
+        "description": "Returns current time for the specified timezone using NEAR blockchain time (not system/NTP time). The API polls NEAR blockchain at 5Hz and serves cached timestamps. If timezone is omitted, determines timezone from the user's IP address. Returns HTTP 503 if blockchain time is unavailable.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "timezone": { "type": "string", "description": "IANA tzdb ID, e.g., Europe/Berlin or America/Indiana/Knox. If omitted, server will determine timezone from the user's IP." },
+                  "locale": { "type": "string", "description": "Optional IETF BCP 47 locale tag or Accept-Language value to localize names and datetime" },
+                  "area": { "type": "string", "deprecated": true, "description": "Legacy segmented parameter for timezone area. Prefer 'timezone'." },
+                  "location": { "type": "string", "deprecated": true, "description": "Legacy segmented parameter for timezone location. Prefer 'timezone'." },
+                  "region": { "type": "string", "deprecated": true, "description": "Legacy segmented parameter for timezone region. Prefer 'timezone'." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/SuccessfulDateTimeJsonResponse" },
+          "503": {
+            "description": "NEAR time unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorJsonResponse" }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/timezones/by-country": {
+      "post": {
+        "summary": "list timezones by ISO 3166-1 alpha-2 country code",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["country_code"],
+                "properties": {
+                  "country_code": { "type": "string", "description": "ISO 3166-1 alpha-2 country code, e.g., US, DE, IN" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/SuccessfulListJsonResponse" },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    
+    
+    "/ip": {
+      "post": {
+        "summary": "request the current time based on the ip of the request or provided IP (IPv4 or IPv6).",
+        "description": "Returns current time for the timezone determined from the client's IP address (or provided IP) using NEAR blockchain time (not system/NTP time). Uses geoip-lite for IP-to-timezone resolution. Returns HTTP 503 if blockchain time is unavailable.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ip": { "type": "string", "description": "Optional IPv4 or IPv6 address" },
+                  "locale": { "type": "string", "description": "Optional IETF BCP 47 locale tag or Accept-Language value to localize names and datetime" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/SuccessfulDateTimeJsonResponse" },
+          "503": {
+            "description": "NEAR time unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorJsonResponse" }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/sign/hash": {
+      "post": {
+        "summary": "Sign a base64url-encoded hash concatenated with the latest NEAR timestamp, likely_time_difference_ms, and public key.",
+        "description": "Signs a hash with NEAR blockchain timestamp to create a tamper-proof timestamped signature. The signature covers: hash + blockchain_timestamp + likely_time_difference_ms + public_key. This proves the hash existed at or before the blockchain time. Returns HTTP 503 if blockchain time is unavailable.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["hash_b64url"],
+                "properties": {
+                  "hash_b64url": { "type": "string", "description": "Base64url-encoded hash. Decoded length must be 1..128 bytes." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signature and concatenated data",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SignHashResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "503": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/timers/schedule": {
+      "post": {
+        "summary": "schedule a delayed webhook using SDK-configured destination.",
+        "description": "Schedules a delayed webhook that fires after the specified delay. **All timestamps (scheduled_at, execute_at, fired_at) use NEAR blockchain time, not system time.** The webhook is sent to the destination configured in the RODiT SDK client. The timer uses blockchain time for both scheduling and firing to ensure tamper-proof timing.\n\n**Blockchain Time Granularity:** NEAR blockchain produces blocks at ~500-600ms intervals. Timestamps advance in discrete steps, not continuously. fired_at is guaranteed to be >= execute_at to maintain temporal consistency. Due to blockchain time granularity and caching, fired_at may equal execute_at even when actual delivery occurs later.\n\n**Minimum Granularity:** 1 second. Sub-second delays are not supported due to blockchain time characteristics.\n\n**Persistence:** Timers are automatically saved to disk every hour and restored on server restart. Timers that should have already fired are never sent late - they are skipped on restore. Maximum data loss window is 1 hour between auto-saves.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["delay_seconds"],
+                "properties": {
+                  "delay_seconds": { "type": "number", "minimum": 1, "maximum": 172800, "description": "Delay in seconds before webhook is sent (1 second to 48 hours)" },
+                  "payload": { "type": "object", "description": "Optional payload echoed back in the webhook" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Timer scheduled",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TimerScheduleResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "400": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/health": {
+      "servers": [
+        { "url": "https://timeherenow.rodit.org" },
+        { "url": "http://localhost:8080" }
+      ],
+      "get": {
+        "summary": "Server health (includes NEAR status)",
+        "responses": {
+          "200": {
+            "description": "Health status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/mcp/resources": {
+      "get": {
+        "summary": "List available MCP resources",
+        "description": "Returns a list of resources available through the Model Context Protocol interface (Public for AI discovery)",
+        "tags": ["MCP"],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": { "type": "integer" },
+            "description": "Maximum number of resources to return"
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": { "type": "string" },
+            "description": "Cursor for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of available resources with pagination info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "uri": { "type": "string" },
+                          "name": { "type": "string" },
+                          "type": { "type": "string" }
+                        }
+                      }
+                    },
+                    "nextCursor": { "type": "string", "nullable": true },
+                    "requestId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/mcp/resource/{uri}": {
+      "get": {
+        "summary": "Get a specific MCP resource",
+        "description": "Returns the content of a specific resource (Public for AI discovery)",
+        "tags": ["MCP"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uri",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "URI of the resource to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resource content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string" },
+                    "content": { "type": "object" },
+                    "requestId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "404": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/mcp/schema": {
+      "get": {
+        "summary": "Get MCP schema",
+        "description": "Returns the OpenAPI schema for the MCP interface (Public for AI discovery)",
+        "tags": ["MCP"],
+        "responses": {
+          "200": {
+            "description": "MCP schema",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Get performance metrics",
+        "description": "Returns current performance metrics including request counts and session information. Requires authentication and authorization.",
+        "tags": ["Metrics"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Performance metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestCount": { "type": "integer" },
+                    "errorCount": { "type": "integer" },
+                    "requestsPerMinute": { "type": "number" },
+                    "currentLoadLevel": { "type": "string" },
+                    "requests": {
+                      "type": "object",
+                      "properties": {
+                        "total": { "type": "integer" },
+                        "errors": { "type": "integer" },
+                        "perMinute": { "type": "number" }
+                      }
+                    },
+                    "sessions": {
+                      "type": "object",
+                      "properties": {
+                        "active": { "type": "integer" },
+                        "active_count": { "type": "integer" }
+                      }
+                    },
+                    "timestamp": { "type": "string" },
+                    "requestId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      },
+      "head": {
+        "summary": "Health probe for metrics endpoint",
+        "description": "Returns 200 OK if the endpoint is available (no body)",
+        "tags": ["Metrics"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Endpoint is available"
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/metrics/system": {
+      "get": {
+        "summary": "Get system metrics",
+        "description": "Returns system resource metrics including CPU, memory, and uptime. Requires authentication and authorization.",
+        "tags": ["Metrics"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "System metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "metrics": {
+                      "type": "object",
+                      "properties": {
+                        "cpu": {
+                          "type": "object",
+                          "properties": {
+                            "usage": { "type": "number" }
+                          }
+                        },
+                        "memory": {
+                          "type": "object",
+                          "properties": {
+                            "used": { "type": "integer" },
+                            "total": { "type": "integer" }
+                          }
+                        },
+                        "uptime": { "type": "integer" }
+                      }
+                    },
+                    "timestamp": { "type": "integer" },
+                    "requestId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      },
+      "head": {
+        "summary": "Health probe for system metrics endpoint",
+        "description": "Returns 200 OK if the endpoint is available (no body)",
+        "tags": ["Metrics"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Endpoint is available"
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/metrics/reset": {
+      "post": {
+        "summary": "Reset performance metrics",
+        "description": "Reset performance metrics counters. Requires admin permissions.",
+        "tags": ["Metrics"],
+        "security": [{ "bearerAuth": [] }],
+        "x-permission-scopes": ["entityAndProperties"],
+        "responses": {
+          "200": {
+            "description": "Metrics reset successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "timestamp": { "type": "integer" },
+                    "requestId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "403": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/metrics/debug": {
+      "get": {
+        "summary": "Debug metrics system",
+        "description": "Returns debug information about the metrics system status",
+        "tags": ["Metrics"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Debug information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "debug": {
+                      "type": "object",
+                      "properties": {
+                        "hasRoditClient": { "type": "boolean" },
+                        "clientType": { "type": "string" },
+                        "hasPerformanceService": { "type": "boolean" },
+                        "performanceServiceType": { "type": "string" },
+                        "metricsSnapshot": { "type": "object" },
+                        "timestamp": { "type": "integer" },
+                        "requestProcessingTime": { "type": "integer" }
+                      }
+                    },
+                    "requestId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/sessions/list_all": {
+      "get": {
+        "summary": "List all active sessions",
+        "description": "Admin route - Get information about all active sessions",
+        "tags": ["Sessions"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of active sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "roditId": { "type": "string" },
+                          "ownerId": { "type": "string" },
+                          "createdAt": { "type": "string" },
+                          "expiresAt": { "type": "string" },
+                          "lastAccessedAt": { "type": "string" },
+                          "status": { "type": "string" }
+                        }
+                      }
+                    },
+                    "count": { "type": "integer" },
+                    "timestamp": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "403": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/sessions/revoke": {
+      "post": {
+        "summary": "Revoke a specific session",
+        "description": "Admin route - Allows administrators to terminate a specific session",
+        "tags": ["Sessions"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sessionId"],
+                "properties": {
+                  "sessionId": { "type": "string", "description": "ID of the session to close" },
+                  "reason": { "type": "string", "description": "Reason for closing the session" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session terminated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "sessionId": { "type": "string" },
+                    "reason": { "type": "string" },
+                    "timestamp": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "403": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "404": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    },
+    "/sessions/cleanup": {
+      "post": {
+        "summary": "Clean up expired sessions",
+        "description": "Triggers cleanup of expired sessions and returns cleanup statistics",
+        "tags": ["Sessions"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Session cleanup completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "removedCount": { "type": "integer" },
+                        "activeSessions": { "type": "integer" },
+                        "totalSessions": { "type": "integer" }
+                      }
+                    },
+                    "requestId": { "type": "string" },
+                    "timestamp": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorJsonResponse" },
+          "500": { "$ref": "#/components/responses/ErrorJsonResponse" }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "SuccessfulListJsonResponse": {
+        "description": "the list of available timezones in JSON format",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ListJsonResponse"
+            }
+          }
+        }
+      },
+      "SuccessfulDateTimeJsonResponse": {
+        "description": "the current time for the timezone requested in JSON format",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DateTimeJsonResponse"
+            }
+          }
+        }
+      },
+      "ErrorJsonResponse": {
+        "description": "an error response in JSON format",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorJsonResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ListJsonResponse": {
+        "type": "array",
+        "description": "a list of available timezones",
+        "items": {
+          "type": "string"
+        }
+      },
+      "DateTimeJsonResponse": {
+        "type": "object",
+        "required": [
+          "user_ip",
+          "date_time",
+          "day_of_week",
+          "day_of_year",
+          "dst_trueorfalse",
+          "dst_offset",
+          "time_zone",
+          "unix_time",
+          "utc_datetime",
+          "utc_offset",
+          "week_number"
+        ],
+        "properties": {
+          "user_ip": {
+            "type": "string",
+            "description": "the IP address of the user making the request (IPv4 or IPv6)"
+          },
+          "date_time": {
+            "type": "string",
+            "description": "an ISO8601-valid string representing the current, local date/time"
+          },
+          "day_of_week": {
+            "type": "integer",
+            "description": "ISO 8601 day number of the week (Monday=1 .. Sunday=7)"
+          },
+          "day_of_year": {
+            "type": "integer",
+            "description": "ordinal date of the current year"
+          },
+          "dst_trueorfalse": {
+            "type": "boolean",
+            "description": "flag indicating whether the local time is in daylight savings"
+          },
+          "dst_offset": {
+            "type": "integer",
+            "description": "the difference in seconds between the current local time and daylight saving time for the location"
+          },
+          "raw_offset": {
+            "type": "integer",
+            "description": "the difference in seconds between the current local time and the time in UTC, excluding any daylight saving difference (see dst_offset)"
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "timezone in `Area/Location` or `Area/Location/Region` format"
+          },
+          "locale": {
+            "type": "string",
+            "description": "resolved locale used for localization"
+          },
+          "unix_time": {
+            "type": "integer",
+            "description": "number of seconds since the Epoch"
+          },
+          "utc_datetime": {
+            "type": "string",
+            "description": "an ISO8601-valid string representing the current date/time in UTC"
+          },
+          "utc_offset": {
+            "type": "string",
+            "description": "an ISO8601-valid string representing the offset from UTC"
+          },
+          "week_number": {
+            "type": "integer",
+            "description": "the current week number"
+          },
+          "likely_time_difference_ms": {
+            "type": "integer",
+            "description": "Conservative >99% likely upper-bound difference (milliseconds) between real time and the returned blockchain time. Calculated as max(observed_lag, block_interval + poll_interval + network_margin). With 5Hz polling (200ms), ~600ms block interval, and 50ms network margin, this is typically 850ms. This represents the maximum expected staleness of the cached NEAR blockchain timestamp."
+          }
+        }
+      },
+      "NearHealthResponse": {
+        "type": "object",
+        "required": ["status", "timestamp"],
+        "properties": {
+          "status": { "type": "string", "enum": ["healthy", "unhealthy"], "description": "Health status of NEAR blockchain connection" },
+          "endpoint": { "type": "string", "description": "NEAR RPC endpoint URL" },
+          "error": { "type": "string", "description": "Error message if unhealthy" },
+          "timestamp": { "type": "string", "description": "ISO 8601 timestamp from NEAR blockchain" },
+          "cache_available": { "type": "boolean", "description": "Whether cached blockchain time is available" },
+          "last_fetch_timestamp": { "type": "string", "nullable": true, "description": "When the last RPC fetch occurred (system time)" },
+          "last_fetch_age_ms": { "type": "integer", "nullable": true, "description": "Milliseconds since last RPC fetch" },
+          "last_block_timestamp": { "type": "string", "nullable": true, "description": "Timestamp from the last NEAR block" },
+          "last_block_age_ms": { "type": "integer", "nullable": true, "description": "Milliseconds since the last block timestamp" },
+          "poll_interval_ms": { "type": "integer", "description": "Polling frequency in milliseconds (default 200ms for 5Hz)" },
+          "block_interval_ms": { "type": "integer", "description": "Expected NEAR block interval in milliseconds (default 600ms)" },
+          "network_margin_ms": { "type": "integer", "description": "Network jitter margin in milliseconds (default 50ms)" },
+          "likely_time_difference_ms": { "type": "integer", "nullable": true, "description": "Conservative upper-bound staleness of cached blockchain time" }
+        },
+        "description": "NEAR blockchain time polling status. The API polls NEAR at 5Hz and caches the latest block timestamp to minimize latency and RPC load."
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": ["status", "timestamp", "service"],
+        "properties": {
+          "status": { "type": "string" },
+          "timestamp": { "type": "string" },
+          "service": { "type": "string" },
+          "near": { "$ref": "#/components/schemas/NearHealthResponse" }
+        }
+      },
+      "ErrorJsonResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "details about the error encountered"
+          }
+        }
+      },
+      "SignHashResponse": {
+        "type": "object",
+        "required": ["data", "concatenated", "signature_base64url"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["hash_b64url", "timestamp_iso", "likely_time_difference_ms", "public_key_base64url"],
+            "properties": {
+              "hash_b64url": { "type": "string" },
+              "timestamp_iso": { "type": "string" },
+              "likely_time_difference_ms": { "type": "integer" },
+              "public_key_base64url": { "type": "string" }
+            }
+          },
+          "concatenated": { "type": "string", "description": "String of 'hash_b64url.timestamp_iso.likely_time_difference_ms.public_key_base64url'" },
+          "signature_base64url": { "type": "string" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": ["success", "message", "user", "token"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "message": { "type": "string" },
+          "user": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" }
+            }
+          },
+          "token": { "type": "string", "description": "JWT authentication token" }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "required": ["success", "message"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "message": { "type": "string" }
+        }
+      },
+      "SignClientResponse": {
+        "type": "object",
+        "required": ["token_id"],
+        "properties": {
+          "token_id": { "type": "string", "description": "Unique identifier for the minted RODiT token" },
+          "fee_signature_base64url": { "type": "string", "description": "Base64url-encoded signature for the minting fee" }
+        }
+      },
+      "TimerScheduleResponse": {
+        "type": "object",
+        "required": ["timer_id", "delay_seconds", "scheduled_at", "execute_at"],
+        "properties": {
+          "timer_id": { "type": "string", "description": "ULID identifying the scheduled timer" },
+          "delay_seconds": { "type": "number", "description": "Delay in seconds before webhook fires" },
+          "scheduled_at": { "type": "string", "description": "ISO 8601 timestamp when scheduling occurred (NEAR blockchain time)" },
+          "execute_at": { "type": "string", "description": "ISO 8601 timestamp when webhook is scheduled to fire (NEAR blockchain time)" },
+          "requestId": { "type": "string", "description": "Server request correlation ID" }
+        },
+        "description": "Response when scheduling a timer. The webhook payload will include these fields plus 'fired_at' (actual firing time from blockchain) and 'payload' (echoed from request)."
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}
