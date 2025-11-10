@@ -38,7 +38,7 @@
    "url": "git+https://github.com/cableguard/timeherenow.git"
   },
   "author": "Discernible Inc",
-  "license": "MIT",
+  "license": "Apache 2.0",
   "bugs": {
    "url": "https://github.com/cableguard/timeherenow/issues"
   },

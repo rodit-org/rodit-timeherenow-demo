@@ -2,7 +2,7 @@
   "openapi": "3.0.1",
   "info": {
     "title": "Time Here Now API",
-    "version": "20251023",
+    "version": "20251108",
     "description": "API to get the current time based on timezone or client IP. **IMPORTANT: All time values are sourced from NEAR blockchain, NOT system/NTP time.** The API polls NEAR blockchain at 5 Hz (200ms intervals) and serves cached blockchain timestamps. Time zones and offsets are sourced from the IANA Time Zone Database (tzdb). Returns HTTP 503 if blockchain time is unavailable."
   },
   "servers": [

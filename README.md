@@ -5,8 +5,8 @@
 TimeHereNow API client for testing RODiT authentication.
 
 **Version:** 2025.11.08  
-**API Version:** 20251023  
-**License:** MIT  
+**API Version:** 20251108  
+**License:** Apache 2.0  
 **Author:** Discernible Inc.
 
 ## Overview
@@ -1299,4 +1299,4 @@ This README integrates content from multiple documentation sources:
 
 ## License
 
-MIT
+Apache 2.0
